@@ -22,6 +22,7 @@
 #include "freertos/task.h"
 #include "cmd_system.h"
 #include "sdkconfig.h"
+#include "esp_log.h"
 
 #include "Uart0.h"
 
@@ -101,8 +102,11 @@ static int test(int argc, char **argv)
     ret = Send_AT_CMD(test_args.cmd->sval[0], test_args.check->sval[0], strlen(test_args.cmd->sval[0]), test_args.time->ival[0]);
     if (ret != NULL)
     {
-        /* code */
-        printf("Successed\n");
+        ESP_LOGI("test", "Successed");
+    }
+    else
+    {
+        ESP_LOGE("test", "fail");
     }
 
     return 0;
