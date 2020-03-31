@@ -24,7 +24,7 @@
 #include "sdkconfig.h"
 #include "esp_log.h"
 
-#include "Uart0.h"
+#include "EC20.h"
 
 #ifdef CONFIG_FREERTOS_USE_STATS_FORMATTING_FUNCTIONS
 #define WITH_TASKS_INFO 1
@@ -63,7 +63,7 @@ void register_system(void)
 
 static int test_fun(int argc, char **argv)
 {
-    EC20_Active();
+    EC20_MQTT_PUB();
     return 0;
 }
 

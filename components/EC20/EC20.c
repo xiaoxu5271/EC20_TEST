@@ -7,7 +7,7 @@
 #include "driver/uart.h"
 #include "driver/gpio.h"
 
-#include "Uart0.h"
+#include "EC20.h"
 
 #define UART0_TXD (UART_PIN_NO_CHANGE)
 #define UART0_RXD (UART_PIN_NO_CHANGE)
@@ -24,6 +24,7 @@
 
 static const char *TAG = "EC20";
 SemaphoreHandle_t xMutex_uart2_sw = NULL;
+TaskHandle_t EC20_Task_Handle;
 
 #define EC20_SW 25
 #define BUF_SIZE 1024
@@ -43,6 +44,7 @@ uint8_t EC20_Http_CFG(void);
 uint8_t EC20_Active(void);
 uint8_t EC20_Post_Data(void);
 uint8_t EC20_MQTT(void);
+uint8_t EC20_MQTT_PUB(void);
 
 QueueHandle_t uart1_xq;
 
@@ -78,7 +80,7 @@ void Uart_Init(void)
     uart1_xq = xQueueCreate(1, sizeof(Data_t));
 
     xTaskCreate(Uart0_Task, "Uart0_Task", 4096, NULL, 9, NULL);
-    xTaskCreate(EC20_RECV_TASK, "EC20_RECV_TASK", 4096, NULL, 8, NULL);
+    xTaskCreate(EC20_RECV_TASK, "EC20_RECV_TASK", 4096, NULL, 8, &EC20_Task_Handle);
 }
 
 char *Send_AT_CMD(char *cmd, char *check_buff, uint8_t cmd_len, uint16_t time_out)
@@ -214,8 +216,15 @@ uint8_t EC20_Init(void)
     ret = AT_Cmd_Send("AT\r\n", "OK", 100, 10);
     if (ret == NULL)
     {
-        ESP_LOGE(TAG, "AT  ");
-        return 0;
+        ESP_LOGE(TAG, "EC20_Init %d", __LINE__);
+        goto end;
+    }
+
+    ret = AT_Cmd_Send("AT+CFUN=1,1\r\n", "OK", 1000, 10);
+    if (ret == NULL)
+    {
+        ESP_LOGE(TAG, "EC20_Init %d", __LINE__);
+        goto end;
     }
 
     // ret = AT_Cmd_Send("ATE0\r\n", "OK", 100, 5);//回显
@@ -228,22 +237,22 @@ uint8_t EC20_Init(void)
     ret = AT_Cmd_Send("AT+IPR=115200\r\n", "OK", 100, 5);
     if (ret == NULL)
     {
-        ESP_LOGE(TAG, "AT+IPR=115200  ");
-        return 0;
+        ESP_LOGE(TAG, "EC20_Init %d", __LINE__);
+        goto end;
     }
 
     ret = AT_Cmd_Send("AT+CPIN?\r\n", "READY", 100, 5);
     if (ret == NULL)
     {
-        ESP_LOGE(TAG, "AT+CPIN?  ");
-        return 0;
+        ESP_LOGE(TAG, "EC20_Init %d", __LINE__);
+        goto end;
     }
 
     ret = AT_Cmd_Send("AT+QCCID\r\n", "+QCCID:", 100, 5);
     if (ret == NULL)
     {
-        ESP_LOGE(TAG, "AT+QCCID  ");
-        return 0;
+        ESP_LOGE(TAG, "EC20_Init %d", __LINE__);
+        goto end;
     }
     else
     {
@@ -254,11 +263,21 @@ uint8_t EC20_Init(void)
     ret = AT_Cmd_Send("AT+CGATT?\r\n", "+CGATT: 1", 100, 100);
     if (ret == NULL)
     {
-        ESP_LOGE(TAG, "AT+QCCID  ");
-        return 0;
+        ESP_LOGE(TAG, "EC20_Init %d", __LINE__);
+        goto end;
     }
 
-    return 1;
+end:
+    // free(active_url);
+    // free(cmd_buf);
+    if (ret == NULL)
+    {
+        return 0;
+    }
+    else
+    {
+        return 1;
+    }
 }
 
 uint8_t EC20_Http_CFG(void)
@@ -268,21 +287,21 @@ uint8_t EC20_Http_CFG(void)
     if (ret == NULL)
     {
         ESP_LOGE(TAG, "EC20_Http_CFG %d", __LINE__);
-        return 0;
+        goto end;
     }
 
     ret = AT_Cmd_Send("AT+QHTTPCFG=\"responseheader\",0\r\n", "OK", 100, 5);
     if (ret == NULL)
     {
         ESP_LOGE(TAG, "EC20_Http_CFG %d", __LINE__);
-        return 0;
+        goto end;
     }
 
     ret = AT_Cmd_Send("AT+QHTTPCFG=\"closewaittime\",0\r\n", "OK", 100, 5);
     if (ret == NULL)
     {
         ESP_LOGE(TAG, "EC20_Http_CFG %d", __LINE__);
-        return 0;
+        goto end;
     }
 
     ret = AT_Cmd_Send("AT+QIACT?\r\n", "+QIACT: 1,1", 100, 5);
@@ -296,17 +315,27 @@ uint8_t EC20_Http_CFG(void)
     if (ret == NULL)
     {
         ESP_LOGE(TAG, "EC20_Http_CFG %d", __LINE__);
-        return 0;
+        goto end;
     }
 
     ret = AT_Cmd_Send("AT+QIACT=1\r\n", "OK", 100, 5);
     if (ret == NULL)
     {
         ESP_LOGE(TAG, "EC20_Http_CFG %d", __LINE__);
-        return 0;
+        goto end;
     }
 
-    return 1;
+end:
+    // free(active_url);
+    // free(cmd_buf);
+    if (ret == NULL)
+    {
+        return 0;
+    }
+    else
+    {
+        return 1;
+    }
 }
 
 uint8_t EC20_Active(void)
@@ -403,7 +432,7 @@ uint8_t EC20_Post_Data(void)
 
     memset(cmd_buf, 0, 30);
     sprintf(cmd_buf, "AT+QHTTPPOST=%d,%d,%d\r\n", 257, 60, 60);
-    ret = AT_Cmd_Send(cmd_buf, "CONNECT", 100, 5);
+    ret = AT_Cmd_Send(cmd_buf, "CONNECT", 10000, 1);
     if (ret == NULL)
     {
         ESP_LOGE(TAG, "EC20_Post %d", __LINE__);
@@ -476,7 +505,7 @@ uint8_t EC20_MQTT(void)
         goto end;
     }
 
-    ret = AT_Cmd_Send("AT+QMTOPEN=0,\"mqtt.ubibot.cn\",1883\r\n", "+QMTOPEN: 0,0", 6000, 1);
+    ret = AT_Cmd_Send("AT+QMTOPEN=0,\"mqtt.ubibot.cn\",1883\r\n", "+QMTOPEN: 0,0", 6000, 10);
     if (ret == NULL)
     {
         ESP_LOGE(TAG, "EC20_MQTT %d", __LINE__);
@@ -493,6 +522,44 @@ uint8_t EC20_MQTT(void)
     memset(cmd_buf, 0, CMD_LEN);
     sprintf(cmd_buf, "AT+QMTSUB=0,1,\"%s\",0\r\n", TOP_IC);
     ret = AT_Cmd_Send(cmd_buf, "+QMTSUB: ", 60000, 1);
+    if (ret == NULL)
+    {
+        ESP_LOGE(TAG, "EC20_MQTT %d", __LINE__);
+        goto end;
+    }
+
+end:
+    // free(active_url);
+    free(cmd_buf);
+    if (ret == NULL)
+    {
+        return 0;
+    }
+    else
+    {
+        return 1;
+    }
+}
+
+uint8_t EC20_MQTT_PUB(void)
+{
+    char *ret;
+    char *cmd_buf;
+    cmd_buf = (char *)malloc(CMD_LEN);
+    memset(cmd_buf, 0, CMD_LEN);
+
+    memset(cmd_buf, 0, CMD_LEN);
+    sprintf(cmd_buf, "AT+QMTPUBEX=0,0,0,0,\"%s\",30\r\n", TOP_IC);
+    ret = AT_Cmd_Send(cmd_buf, ">", 6000, 1);
+    if (ret == NULL)
+    {
+        ESP_LOGE(TAG, "EC20_MQTT %d", __LINE__);
+        goto end;
+    }
+
+    memset(cmd_buf, 0, CMD_LEN);
+    sprintf(cmd_buf, "This is test data, hello MQTT.\r\n");
+    ret = AT_Cmd_Send(cmd_buf, "+QMTPUBEX: 0,0,0", 60000, 1);
     if (ret == NULL)
     {
         ESP_LOGE(TAG, "EC20_MQTT %d", __LINE__);

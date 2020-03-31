@@ -21,7 +21,7 @@
 #include "nvs.h"
 #include "nvs_flash.h"
 
-#include "Uart0.h"
+#include "EC20.h"
 
 static const char *TAG = "example";
 
